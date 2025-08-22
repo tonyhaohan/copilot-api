@@ -238,6 +238,344 @@ When running on a remote server:
 - Use firewall rules to restrict access to trusted networks
 - The GitHub and Copilot tokens are stored on the remote server, not transmitted to clients
 
+## 远程Ubuntu服务器部署指南 (Chinese Guide)
+
+### 概述
+
+此代理可以在远程Ubuntu服务器上运行，并通过互联网连接到本地计算机上的Claude Code。这对于希望在更强大的服务器上集中运行代理服务的情况非常有用。
+
+### 在Ubuntu服务器上部署
+
+#### 第一步：准备服务器环境
+
+1. **SSH连接到你的Ubuntu服务器**：
+   ```bash
+   ssh your-username@your-server-ip
+   ```
+
+2. **安装Node.js和npm**（如果尚未安装）：
+   ```bash
+   # 更新软件包列表
+   sudo apt update
+   
+   # 安装Node.js和npm
+   sudo apt install nodejs npm -y
+   
+   # 验证安装
+   node --version
+   npm --version
+   ```
+
+3. **可选：安装Bun运行时**（推荐，性能更好）：
+   ```bash
+   curl -fsSL https://bun.sh/install | bash
+   source ~/.bashrc
+   bun --version
+   ```
+
+#### 第二步：在服务器上运行Copilot API
+
+1. **运行身份验证**（首次使用）：
+   ```bash
+   npx copilot-api@latest auth
+   ```
+   按照提示完成GitHub身份验证。
+
+2. **启动服务器并配置外部访问**：
+   ```bash
+   # 使用服务器的外部IP地址或域名
+   npx copilot-api@latest start --host YOUR_SERVER_IP --port 4141 --claude-code
+   ```
+   
+   或者如果你有域名：
+   ```bash
+   npx copilot-api@latest start --host your-domain.com --port 4141 --claude-code
+   ```
+
+3. **服务器将显示配置信息**，包括：
+   - Claude Code的环境变量命令
+   - 使用监控器的URL
+   - 服务器绑定信息
+
+#### 第三步：配置防火墙（重要）
+
+为了安全起见，建议配置防火墙规则：
+
+```bash
+# 允许SSH连接（确保不会断开当前连接）
+sudo ufw allow ssh
+
+# 允许特定端口的访问（4141是默认端口）
+sudo ufw allow 4141
+
+# 启用防火墙
+sudo ufw enable
+
+# 检查状态
+sudo ufw status
+```
+
+### 本地电脑配置Claude Code
+
+#### 方法一：使用自动生成的命令（推荐）
+
+1. **复制服务器显示的环境变量命令**，它看起来像这样：
+   ```bash
+   export ANTHROPIC_BASE_URL=http://YOUR_SERVER_IP:4141 ANTHROPIC_AUTH_TOKEN=dummy ANTHROPIC_MODEL=gpt-4.1 ANTHROPIC_SMALL_FAST_MODEL=gpt-4.1 && claude
+   ```
+
+2. **在本地终端中运行该命令**启动Claude Code。
+
+#### 方法二：手动配置settings.json
+
+1. **在本地项目根目录创建`.claude/settings.json`文件**：
+   ```json
+   {
+     "env": {
+       "ANTHROPIC_BASE_URL": "http://YOUR_SERVER_IP:4141",
+       "ANTHROPIC_AUTH_TOKEN": "dummy",
+       "ANTHROPIC_MODEL": "gpt-4.1",
+       "ANTHROPIC_SMALL_FAST_MODEL": "gpt-4.1"
+     }
+   }
+   ```
+
+2. **将`YOUR_SERVER_IP`替换为你的服务器实际IP地址或域名**。
+
+3. **正常启动Claude Code**，它将自动使用这些设置。
+
+### 使用SSH隧道（可选，更安全）
+
+如果你不想将服务器端口暴露到互联网，可以使用SSH隧道：
+
+#### 在本地电脑上设置SSH隧道：
+
+```bash
+# 建立SSH隧道，将本地4141端口转发到服务器的4141端口
+ssh -L 4141:localhost:4141 your-username@your-server-ip -N
+```
+
+#### 在服务器上运行（使用localhost）：
+
+```bash
+npx copilot-api@latest start --port 4141 --claude-code
+```
+
+#### 在本地配置Claude Code使用localhost：
+
+```json
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://localhost:4141",
+    "ANTHROPIC_AUTH_TOKEN": "dummy",
+    "ANTHROPIC_MODEL": "gpt-4.1",
+    "ANTHROPIC_SMALL_FAST_MODEL": "gpt-4.1"
+  }
+}
+```
+
+### 安全建议
+
+#### 对于互联网暴露的服务器：
+
+1. **使用防火墙**限制访问：
+   ```bash
+   # 只允许特定IP访问
+   sudo ufw allow from YOUR_LOCAL_IP to any port 4141
+   
+   # 删除通用规则
+   sudo ufw delete allow 4141
+   ```
+
+2. **考虑使用反向代理**（如nginx）添加HTTPS支持：
+   ```bash
+   # 安装nginx
+   sudo apt install nginx -y
+   
+   # 配置反向代理和SSL证书
+   ```
+
+3. **使用systemd服务**保持服务运行：
+   
+   创建服务文件 `/etc/systemd/system/copilot-api.service`：
+   ```ini
+   [Unit]
+   Description=GitHub Copilot API Proxy
+   After=network.target
+   
+   [Service]
+   Type=simple
+   User=your-username
+   WorkingDirectory=/home/your-username
+   ExecStart=/usr/bin/npx copilot-api@latest start --host YOUR_SERVER_IP --port 4141
+   Restart=always
+   RestartSec=10
+   
+   [Install]
+   WantedBy=multi-user.target
+   ```
+   
+   启用服务：
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl enable copilot-api
+   sudo systemctl start copilot-api
+   sudo systemctl status copilot-api
+   ```
+
+#### 对于SSH隧道方式：
+
+1. **保持SSH隧道连接稳定**：
+   ```bash
+   # 使用autossh保持连接
+   sudo apt install autossh -y
+   autossh -M 20000 -L 4141:localhost:4141 your-username@your-server-ip -N
+   ```
+
+2. **配置SSH密钥认证**（推荐）：
+   ```bash
+   # 在本地生成SSH密钥对（如果还没有）
+   ssh-keygen -t rsa -b 4096 -C "your-email@example.com"
+   
+   # 将公钥复制到服务器
+   ssh-copy-id your-username@your-server-ip
+   ```
+
+### 故障排除
+
+#### 常见问题：
+
+1. **连接被拒绝**：
+   - 检查防火墙设置
+   - 确认服务器正在运行并监听正确端口
+   - 验证IP地址和端口号
+
+2. **身份验证失败**：
+   - 在服务器上重新运行 `npx copilot-api@latest auth`
+   - 检查GitHub Copilot订阅状态
+
+3. **性能问题**：
+   - 考虑使用更靠近的服务器
+   - 检查网络延迟和带宽
+
+4. **Claude Code无法连接**：
+   - 验证 `ANTHROPIC_BASE_URL` 设置
+   - 检查本地网络防火墙设置
+   - 确认服务器服务正常运行
+
+### 验证部署
+
+1. **检查服务器状态**：
+   ```bash
+   curl http://YOUR_SERVER_IP:4141/v1/models
+   ```
+
+2. **查看使用监控器**：
+   打开浏览器访问：`https://ericc-ch.github.io/copilot-api?endpoint=http://YOUR_SERVER_IP:4141/usage`
+
+3. **测试Claude Code连接**：
+   使用配置好的环境变量启动Claude Code并发送测试消息。
+
+### 完整部署示例
+
+#### 服务器端完整命令序列：
+
+```bash
+# 1. 连接到服务器
+ssh your-username@your-server-ip
+
+# 2. 更新系统和安装依赖
+sudo apt update && sudo apt install nodejs npm -y
+
+# 3. 身份验证
+npx copilot-api@latest auth
+
+# 4. 启动服务（替换为你的实际IP）
+npx copilot-api@latest start --host 123.456.789.123 --port 4141 --claude-code
+
+# 5. 配置防火墙
+sudo ufw allow ssh
+sudo ufw allow 4141
+sudo ufw enable
+```
+
+#### 本地端配置：
+
+1. **复制服务器输出的环境变量命令**
+2. **在本地终端运行该命令启动Claude Code**
+
+这样配置完成后，你的本地Claude Code就可以通过互联网连接到远程Ubuntu服务器上的GitHub Copilot API代理服务了。
+
+## 回答你的问题 (Answer to Your Question)
+
+**是的，此项目已经完全实现了你的目标！** 
+
+你想要实现的功能——让Ubuntu服务器运行本项目，然后本地的Claude Code直接与服务器转发的copilot api通信——在之前的修改中已经完成了。具体来说：
+
+### ✅ 已实现的功能：
+
+1. **远程服务器支持**：`--host` 参数让服务器绑定到 `0.0.0.0`，接受外部连接
+2. **Claude Code自动配置**：`--claude-code` 参数自动生成正确的环境变量，指向你的远程服务器
+3. **完整的部署流程**：包含从服务器设置到本地客户端配置的完整说明
+
+### 🔧 如何操作：
+
+**在你的Ubuntu服务器上：**
+```bash
+# 安装依赖并认证
+sudo apt install nodejs npm -y
+npx copilot-api@latest auth
+
+# 启动服务（用你的实际服务器IP替换）
+npx copilot-api@latest start --host YOUR_SERVER_IP --port 4141 --claude-code
+```
+
+**在你的本地电脑上：**
+- 复制服务器输出的环境变量命令并运行，或
+- 创建 `.claude/settings.json` 文件配置远程服务器地址
+
+### 🛡️ 安全建议：
+- 配置防火墙规则
+- 考虑使用SSH隧道（如果不想暴露端口到互联网）
+- 设置systemd服务保持运行
+
+**结论：项目的现有代码已经支持你的需求，上面的中文文档提供了完整的部署指南！**
+
+---
+
+## Summary of Remote Server Support
+
+**✅ The project now fully supports your use case!**
+
+The existing codebase already provides all the functionality needed to run the Copilot API proxy on a remote Ubuntu server and connect Claude Code from your local computer:
+
+### What's Already Working:
+
+1. **Remote Server Deployment**: The `--host` parameter allows the server to bind to `0.0.0.0` and accept external connections
+2. **Claude Code Integration**: The `--claude-code` flag automatically generates the correct environment variables for remote connections
+3. **Automatic Configuration**: Server URLs are correctly constructed using your specified hostname/IP
+4. **Security Features**: Built-in support for rate limiting, manual approval, and token management
+
+### What Was Added:
+
+- **Comprehensive Chinese Documentation**: Complete step-by-step instructions in Chinese for Ubuntu server deployment
+- **Security Guidance**: Firewall configuration, SSH tunneling, and systemd service setup instructions
+- **Troubleshooting Section**: Common issues and solutions for remote deployments
+- **Multiple Deployment Options**: Direct internet access and SSH tunnel approaches
+
+### Quick Start Commands:
+
+**On your Ubuntu server:**
+```bash
+npx copilot-api@latest auth
+npx copilot-api@latest start --host YOUR_SERVER_IP --port 4141 --claude-code
+```
+
+**On your local computer:**
+Use the environment command generated by the server, or create a `.claude/settings.json` file with the remote server URL.
+
+The implementation is complete and ready for your remote server deployment scenario!
+
 ## API Endpoints
 
 The server exposes several endpoints to interact with the Copilot API. It provides OpenAI-compatible endpoints and now also includes support for Anthropic-compatible endpoints, allowing for greater flexibility with different tools and services.
