@@ -154,6 +154,7 @@ The following command line options are available for the `start` command:
 | Option         | Description                                                                   | Default    | Alias |
 | -------------- | ----------------------------------------------------------------------------- | ---------- | ----- |
 | --port         | Port to listen on                                                             | 4141       | -p    |
+| --host         | Host/IP address for external access (defaults to localhost for local use)    | localhost  | -h    |
 | --verbose      | Enable verbose logging                                                        | false      | -v    |
 | --account-type | Account type to use (individual, business, enterprise)                        | individual | -a    |
 | --manual       | Enable manual request approval                                                | false      | none  |
@@ -175,6 +176,67 @@ The following command line options are available for the `start` command:
 | Option | Description               | Default | Alias |
 | ------ | ------------------------- | ------- | ----- |
 | --json | Output debug info as JSON | false   | none  |
+
+## Remote Server Deployment
+
+You can run the Copilot API proxy on a remote server and connect to it from your local computer using Claude Code. This is useful when you want to centralize the proxy service or run it on a more powerful machine.
+
+### Running on a Remote Server
+
+To run the proxy on a remote server, use the `--host` parameter to specify the server's external IP address or hostname:
+
+```bash
+# On your remote server (replace with your server's IP/hostname)
+npx copilot-api@latest start --host 192.168.1.100 --port 4141
+```
+
+Or with your server's domain name:
+
+```bash
+npx copilot-api@latest start --host myserver.example.com --port 4141
+```
+
+When you specify a `--host` parameter, the server will:
+- Bind to `0.0.0.0` to accept connections from any interface
+- Generate Claude Code configuration URLs using your specified hostname
+- Display the correct external URL in the Usage Viewer
+
+### Connecting Claude Code to Remote Server
+
+#### Option 1: Interactive Setup
+
+Use the `--claude-code` flag with the `--host` parameter:
+
+```bash
+# This will generate the correct environment variables for your remote server
+npx copilot-api@latest start --host 192.168.1.100 --claude-code
+```
+
+The generated command will include the correct `ANTHROPIC_BASE_URL` pointing to your remote server.
+
+#### Option 2: Manual Configuration
+
+Create a `.claude/settings.json` file in your local project with the remote server URL:
+
+```json
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://192.168.1.100:4141",
+    "ANTHROPIC_AUTH_TOKEN": "dummy",
+    "ANTHROPIC_MODEL": "gpt-4.1",
+    "ANTHROPIC_SMALL_FAST_MODEL": "gpt-4.1"
+  }
+}
+```
+
+Replace `192.168.1.100:4141` with your actual server hostname/IP and port.
+
+### Security Considerations
+
+When running on a remote server:
+- Consider using HTTPS/TLS encryption if transmitting over the internet
+- Use firewall rules to restrict access to trusted networks
+- The GitHub and Copilot tokens are stored on the remote server, not transmitted to clients
 
 ## API Endpoints
 
