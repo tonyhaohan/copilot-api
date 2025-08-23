@@ -244,16 +244,108 @@ When running on a remote server:
 
 此代理可以在远程Ubuntu服务器上运行，并通过互联网连接到本地计算机上的Claude Code。这对于希望在更强大的服务器上集中运行代理服务的情况非常有用。
 
+### 🎯 回答您的问题 (Answers to Your Questions)
+
+#### Q1: 如何在服务器上安装自定义版本？
+**A**: 由于这是您修改过的版本，需要从源码安装而不是使用npm。请参考下面的"从源码安装"部分。
+
+#### Q2: SSH端口与服务端口是否冲突？
+**A**: **不会冲突！** SSH端口(如您的1234)和copilot-api服务端口(默认4141)是完全不同的服务：
+- SSH端口(1234): 用于终端连接服务器 `ssh -p 1234 hhao@166.111.25.29`
+- Copilot-API端口(4141): 用于HTTP API服务，供Claude Code连接使用
+- 这两个端口互不影响，可以同时使用
+
+#### Q3: 具体启动命令是什么？
+**A**: 根据安装方式不同：
+- **官方版本**: `npx copilot-api@latest start --host YOUR_SERVER_IP --port 4141 --claude-code`
+- **自定义版本**: `bun run start --host YOUR_SERVER_IP --port 4141 --claude-code`
+
+---
+
 ### 在Ubuntu服务器上部署
 
-#### 第一步：准备服务器环境
+#### 安装方式选择
+
+根据您的情况选择合适的安装方式：
+
+**方式A: 从源码安装（推荐用于自定义版本）**
+**方式B: 从npm安装（适用于官方版本）**
+
+#### 🚀 方式A: 从源码安装（自定义版本）
+
+##### 第一步：准备服务器环境
 
 1. **SSH连接到你的Ubuntu服务器**：
    ```bash
-   ssh your-username@your-server-ip
+   ssh -p 1234 hhao@166.111.25.29  # 使用您的实际SSH端口和服务器地址
    ```
 
-2. **安装Node.js和npm**（如果尚未安装）：
+2. **安装必要的系统依赖**：
+   ```bash
+   # 更新软件包列表
+   sudo apt update
+   
+   # 安装git和基础编译工具
+   sudo apt install git curl build-essential -y
+   ```
+
+3. **安装Bun运行时**（推荐，性能更好）：
+   ```bash
+   curl -fsSL https://bun.sh/install | bash
+   source ~/.bashrc
+   bun --version
+   ```
+
+##### 第二步：下载和构建代码
+
+1. **克隆您的自定义代码到服务器**：
+   ```bash
+   # 克隆您的仓库
+   git clone https://github.com/tonyhaohan/copilot-api.git
+   cd copilot-api
+   ```
+
+2. **安装依赖并构建项目**：
+   ```bash
+   # 安装依赖
+   bun install
+   
+   # 构建项目
+   bun run build
+   
+   # 验证构建成功
+   ls -la dist/
+   ```
+
+##### 第三步：运行身份验证和启动服务
+
+1. **首次身份验证**：
+   ```bash
+   bun run start auth
+   ```
+   按照提示完成GitHub身份验证。
+
+2. **启动服务器**：
+   ```bash
+   # 使用您的服务器IP地址
+   bun run start --host 166.111.25.29 --port 4141 --claude-code
+   
+   # 或者使用0.0.0.0监听所有接口
+   bun run start --host 0.0.0.0 --port 4141 --claude-code
+   ```
+
+---
+
+#### 🏢 方式B: 从npm安装（官方版本）
+
+##### 第一步：准备服务器环境（npm方式）
+
+1. **SSH连接到你的Ubuntu服务器**：
+   ```bash
+   ssh -p 1234 hhao@166.111.25.29  # 使用您的实际SSH端口和服务器地址
+   ```
+
+2. **安装Node.js和npm**：
    ```bash
    # 更新软件包列表
    sudo apt update
@@ -273,7 +365,7 @@ When running on a remote server:
    bun --version
    ```
 
-#### 第二步：在服务器上运行Copilot API
+##### 第二步：在服务器上运行Copilot API（npm方式）
 
 1. **运行身份验证**（首次使用）：
    ```bash
@@ -283,30 +375,26 @@ When running on a remote server:
 
 2. **启动服务器并配置外部访问**：
    ```bash
-   # 使用服务器的外部IP地址或域名
-   npx copilot-api@latest start --host YOUR_SERVER_IP --port 4141 --claude-code
-   ```
+   # 使用服务器的外部IP地址
+   npx copilot-api@latest start --host 166.111.25.29 --port 4141 --claude-code
    
-   或者如果你有域名：
-   ```bash
+   # 或者使用域名（如果有）
    npx copilot-api@latest start --host your-domain.com --port 4141 --claude-code
    ```
 
-3. **服务器将显示配置信息**，包括：
-   - Claude Code的环境变量命令
-   - 使用监控器的URL
-   - 服务器绑定信息
+---
 
-#### 第三步：配置防火墙（重要）
+#### 🔒 第三步：配置防火墙（重要 - 两种方式都需要）
 
 为了安全起见，建议配置防火墙规则：
 
 ```bash
 # 允许SSH连接（确保不会断开当前连接）
-sudo ufw allow ssh
+# 注意：如果您的SSH端口不是默认的22，请相应调整
+sudo ufw allow 1234/tcp  # 允许您的SSH端口1234
 
-# 允许特定端口的访问（4141是默认端口）
-sudo ufw allow 4141
+# 允许copilot-api服务端口访问（4141是默认端口）
+sudo ufw allow 4141/tcp
 
 # 启用防火墙
 sudo ufw enable
@@ -315,13 +403,31 @@ sudo ufw enable
 sudo ufw status
 ```
 
-### 本地电脑配置Claude Code
+**重要说明**：
+- SSH端口(1234)和copilot-api端口(4141)是不同的服务，不会冲突
+- SSH用于终端连接，copilot-api用于HTTP API服务
+- 确保两个端口都允许通过防火墙
+
+#### 🎉 第四步：验证部署成功
+
+服务启动后，您应该看到类似以下输出：
+
+```
+✅ GitHub Copilot API 代理启动成功！
+🌐 服务地址: http://166.111.25.29:4141
+📊 使用监控: https://ericc-ch.github.io/copilot-api?endpoint=http://166.111.25.29:4141/usage
+
+📋 已复制Claude Code启动命令到剪贴板：
+export ANTHROPIC_BASE_URL=http://166.111.25.29:4141 ANTHROPIC_AUTH_TOKEN=dummy ANTHROPIC_MODEL=gpt-4o ANTHROPIC_SMALL_FAST_MODEL=gpt-4o && claude
+```
+
+### 💻 本地电脑配置Claude Code
 
 #### 方法一：使用自动生成的命令（推荐）
 
 1. **复制服务器显示的环境变量命令**，它看起来像这样：
    ```bash
-   export ANTHROPIC_BASE_URL=http://YOUR_SERVER_IP:4141 ANTHROPIC_AUTH_TOKEN=dummy ANTHROPIC_MODEL=gpt-4.1 ANTHROPIC_SMALL_FAST_MODEL=gpt-4.1 && claude
+   export ANTHROPIC_BASE_URL=http://166.111.25.29:4141 ANTHROPIC_AUTH_TOKEN=dummy ANTHROPIC_MODEL=gpt-4o ANTHROPIC_SMALL_FAST_MODEL=gpt-4o && claude
    ```
 
 2. **在本地终端中运行该命令**启动Claude Code。
@@ -332,19 +438,19 @@ sudo ufw status
    ```json
    {
      "env": {
-       "ANTHROPIC_BASE_URL": "http://YOUR_SERVER_IP:4141",
+       "ANTHROPIC_BASE_URL": "http://166.111.25.29:4141",
        "ANTHROPIC_AUTH_TOKEN": "dummy",
-       "ANTHROPIC_MODEL": "gpt-4.1",
-       "ANTHROPIC_SMALL_FAST_MODEL": "gpt-4.1"
+       "ANTHROPIC_MODEL": "gpt-4o",
+       "ANTHROPIC_SMALL_FAST_MODEL": "gpt-4o"
      }
    }
    ```
 
-2. **将`YOUR_SERVER_IP`替换为你的服务器实际IP地址或域名**。
+2. **将`166.111.25.29`替换为你的服务器实际IP地址或域名**。
 
 3. **正常启动Claude Code**，它将自动使用这些设置。
 
-### 使用SSH隧道（可选，更安全）
+### 🔒 使用SSH隧道（可选，更安全）
 
 如果你不想将服务器端口暴露到互联网，可以使用SSH隧道：
 
@@ -352,11 +458,20 @@ sudo ufw status
 
 ```bash
 # 建立SSH隧道，将本地4141端口转发到服务器的4141端口
-ssh -L 4141:localhost:4141 your-username@your-server-ip -N
+ssh -p 1234 -L 4141:localhost:4141 hhao@166.111.25.29 -N
+
+# 或者保持会话活跃的方式
+ssh -p 1234 -L 4141:localhost:4141 hhao@166.111.25.29
 ```
 
 #### 在服务器上运行（使用localhost）：
 
+**源码安装方式**：
+```bash
+bun run start --port 4141 --claude-code
+```
+
+**npm安装方式**：
 ```bash
 npx copilot-api@latest start --port 4141 --claude-code
 ```
@@ -505,6 +620,114 @@ sudo ufw enable
 2. **在本地终端运行该命令启动Claude Code**
 
 这样配置完成后，你的本地Claude Code就可以通过互联网连接到远程Ubuntu服务器上的GitHub Copilot API代理服务了。
+
+## 📋 针对您问题的完整回答 (Complete Answers to Your Questions)
+
+### ❓ Q1: 自定义版本如何在服务器上安装？
+
+**答**: 由于这是您修改过的版本，需要从源码安装。完整步骤：
+
+```bash
+# 1. SSH连接到您的服务器
+ssh -p 1234 hhao@166.111.25.29
+
+# 2. 安装必要依赖
+sudo apt update
+sudo apt install git curl build-essential -y
+
+# 3. 安装Bun运行时
+curl -fsSL https://bun.sh/install | bash
+source ~/.bashrc
+
+# 4. 克隆您的代码
+git clone https://github.com/tonyhaohan/copilot-api.git
+cd copilot-api
+
+# 5. 安装依赖并构建
+bun install
+bun run build
+
+# 6. 首次身份验证
+bun run start auth
+
+# 7. 启动服务
+bun run start --host 166.111.25.29 --port 4141 --claude-code
+```
+
+### ❓ Q2: SSH端口与服务端口是否冲突？
+
+**答**: **完全不会冲突！** 这是两个不同的服务：
+
+| 服务 | 端口 | 用途 | 协议 |
+|------|------|------|------|
+| SSH | 1234 | 终端连接服务器 | SSH协议 |
+| Copilot-API | 4141 | HTTP API服务 | HTTP协议 |
+
+- SSH端口用于您远程登录服务器：`ssh -p 1234 hhao@166.111.25.29`
+- Copilot-API端口用于Claude Code连接HTTP服务：`http://166.111.25.29:4141`
+- 两者可以同时运行，互不影响
+
+### ❓ Q3: 具体的启动命令是什么？
+
+**答**: 根据安装方式选择对应命令：
+
+#### 源码安装启动命令（推荐给您）:
+```bash
+# 基本启动
+bun run start --host 166.111.25.29 --port 4141 --claude-code
+
+# 带详细日志
+bun run start --host 166.111.25.29 --port 4141 --claude-code --verbose
+
+# 如果需要速率限制（每10秒一个请求）
+bun run start --host 166.111.25.29 --port 4141 --claude-code --rate-limit 10
+```
+
+#### npm安装启动命令（如果使用官方版本）:
+```bash
+npx copilot-api@latest start --host 166.111.25.29 --port 4141 --claude-code
+```
+
+### ✅ 防火墙配置（重要）
+
+确保两个端口都能通过防火墙：
+
+```bash
+# 允许SSH端口（确保不会断开连接）
+sudo ufw allow 1234/tcp
+
+# 允许Copilot API端口
+sudo ufw allow 4141/tcp
+
+# 启用防火墙
+sudo ufw enable
+
+# 检查状态
+sudo ufw status
+```
+
+### 🎯 启动成功标志
+
+当服务启动成功时，您会看到类似输出：
+
+```
+✅ GitHub Copilot API 代理启动成功！
+🌐 服务地址: http://166.111.25.29:4141
+📊 使用监控: https://ericc-ch.github.io/copilot-api?endpoint=http://166.111.25.29:4141/usage
+
+📋 已复制Claude Code启动命令到剪贴板：
+export ANTHROPIC_BASE_URL=http://166.111.25.29:4141 ANTHROPIC_AUTH_TOKEN=dummy ANTHROPIC_MODEL=gpt-4o ANTHROPIC_SMALL_FAST_MODEL=gpt-4o && claude
+```
+
+### 💻 在本地使用Claude Code
+
+复制上面的命令，在本地终端运行即可：
+
+```bash
+export ANTHROPIC_BASE_URL=http://166.111.25.29:4141 ANTHROPIC_AUTH_TOKEN=dummy ANTHROPIC_MODEL=gpt-4o ANTHROPIC_SMALL_FAST_MODEL=gpt-4o && claude
+```
+
+---
 
 ## 回答你的问题 (Answer to Your Question)
 
